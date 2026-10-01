@@ -7,16 +7,11 @@ class AiConfig {
   static bool aiInsightsEnabled = true;
 
   /// Backend server proxy URL.
-  /// Uses 10.0.2.2 for Android emulator, localhost for desktop/tests, or environment variable.
+  /// Points to live Render backend proxy or custom environment variable.
   static String get backendUrl {
     const customUrl = String.fromEnvironment('AI_BACKEND_URL');
     if (customUrl.isNotEmpty) return customUrl;
-    if (defaultTargetPlatform == TargetPlatform.android && !kIsWeb) {
-      // 10.0.2.2 maps to host machine localhost from Android emulator
-      // For physical Android devices on same Wi-Fi, host IP or local proxy can be used.
-      return 'http://10.0.2.2:8000';
-    }
-    return 'http://127.0.0.1:8000';
+    return 'https://saferoute-app-z88y.onrender.com';
   }
 
   /// Network timeout duration for AI explanation requests.
