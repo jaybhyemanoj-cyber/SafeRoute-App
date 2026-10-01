@@ -1,0 +1,31 @@
+name: saferoute_ai
+description: "SafeRoute AI - Smart Walking Navigation (Phase 1)"
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.0.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  cupertino_icons: ^1.0.8
+  flutter_map: ^7.0.2
+  latlong2: ^0.9.1
+  geolocator: ^13.0.1
+  http: ^1.2.2
+  google_fonts: ^6.2.1
+  flutter_animate: ^4.5.2
+  supabase_flutter: ^2.8.0
+  image_picker: ^1.1.2
+  google_sign_in: ^6.2.2
+  firebase_core: ^3.10.0
+  firebase_auth: ^5.4.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
