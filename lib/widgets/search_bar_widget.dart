@@ -9,11 +9,13 @@ import '../theme/app_typography.dart';
 class FloatingSearchBar extends StatefulWidget {
   final Function(Destination) onDestinationSelected;
   final VoidCallback? onClear;
+  final FocusNode? focusNode;
 
   const FloatingSearchBar({
     super.key,
     required this.onDestinationSelected,
     this.onClear,
+    this.focusNode,
   });
 
   @override
@@ -22,7 +24,8 @@ class FloatingSearchBar extends StatefulWidget {
 
 class _FloatingSearchBarState extends State<FloatingSearchBar> {
   final TextEditingController _controller = TextEditingController();
-  final FocusNode _focusNode = FocusNode();
+  late FocusNode _focusNode;
+  bool _createdInternalFocusNode = false;
   Timer? _debounceTimer;
 
   List<Destination> _searchResults = [];
@@ -34,13 +37,21 @@ class _FloatingSearchBarState extends State<FloatingSearchBar> {
   @override
   void initState() {
     super.initState();
-    _focusNode.addListener(() {
-      setState(() {
-        _isExpanded = _focusNode.hasFocus;
-        if (_isExpanded && _searchResults.isEmpty && _controller.text.isEmpty) {
-          _searchResults = _geocodingService.getPopularLandmarks();
-        }
-      });
+    if (widget.focusNode != null) {
+      _focusNode = widget.focusNode!;
+    } else {
+      _focusNode = FocusNode();
+      _createdInternalFocusNode = true;
+    }
+    _focusNode.addListener(_onFocusChange);
+  }
+
+  void _onFocusChange() {
+    setState(() {
+      _isExpanded = _focusNode.hasFocus;
+      if (_isExpanded && _searchResults.isEmpty && _controller.text.isEmpty) {
+        _searchResults = _geocodingService.getPopularLandmarks();
+      }
     });
   }
 
@@ -48,7 +59,10 @@ class _FloatingSearchBarState extends State<FloatingSearchBar> {
   void dispose() {
     _debounceTimer?.cancel();
     _controller.dispose();
-    _focusNode.dispose();
+    _focusNode.removeListener(_onFocusChange);
+    if (_createdInternalFocusNode) {
+      _focusNode.dispose();
+    }
     super.dispose();
   }
 

@@ -70,8 +70,8 @@ class CurrentLocationMarkerWidget extends StatelessWidget {
     return Container(
       width: 32,
       height: 32,
-      decoration: BoxDecoration(
-        color: const Color.fromRGBO(5, 150, 105, 0.2),
+      decoration: const BoxDecoration(
+        color: Color.fromRGBO(37, 99, 235, 0.18),
         shape: BoxShape.circle,
       ),
       child: Center(
@@ -79,9 +79,9 @@ class CurrentLocationMarkerWidget extends StatelessWidget {
           width: 18,
           height: 18,
           decoration: BoxDecoration(
-            color: AppColors.primary,
+            color: const Color(0xFF2563EB),
             shape: BoxShape.circle,
-            border: Border.all(color: Colors.white, width: 3),
+            border: Border.all(color: Colors.white, width: 2.5),
             boxShadow: AppColors.softShadow,
           ),
         ),

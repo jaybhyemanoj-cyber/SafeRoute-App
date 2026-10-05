@@ -34,17 +34,41 @@ class HazardAnalysisService {
   }
 
   /// Calculate effective penalty for a hazard report given its distance to route.
-  /// Effective Penalty = Base Penalty * Confidence * RecencyWeight * ProximityWeight
+  /// Automated Trust System Rules:
+  /// - Expired reports produce 0.0 penalty.
+  /// - Community-confirmed reports receive a confidence boost.
+  /// - Clear/resolved votes reduce report influence.
+  /// - Unconfirmed reports still influence scoring with calibrated weight.
+  /// - Duplicate report clusters scale down redundant influence.
   static double calculateEffectivePenalty({
     required double basePenalty,
     required double confidence,
     required DateTime createdAt,
     required double distanceMeters,
+    HazardReport? report,
+    int clusterSize = 1,
   }) {
+    if (report != null && report.isExpired) {
+      return 0.0;
+    }
+
+    double effectiveConfidence = confidence;
+
+    if (report != null) {
+      if (report.isCommunityConfirmed) {
+        effectiveConfidence = (effectiveConfidence * 1.25).clamp(0.0, 1.0);
+      }
+      if (report.clearVotesCount > 0) {
+        final double clearFactor = (1.0 - (report.clearVotesCount * 0.35)).clamp(0.1, 1.0);
+        effectiveConfidence *= clearFactor;
+      }
+    }
+
     final recencyWeight = SafetyConfig.getRecencyWeight(createdAt);
     final proximityWeight = SafetyConfig.getProximityWeight(distanceMeters);
+    final double duplicateScale = 1.0 / (1.0 + 0.3 * (clusterSize - 1));
 
-    return basePenalty * confidence * recencyWeight * proximityWeight;
+    return basePenalty * effectiveConfidence * recencyWeight * proximityWeight * duplicateScale;
   }
 
   /// Group nearby reports by hazard category to prevent duplicate infinite penalties.

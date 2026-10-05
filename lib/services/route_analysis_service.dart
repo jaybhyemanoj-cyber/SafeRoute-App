@@ -1,4 +1,6 @@
 import '../models/hazard_report.dart';
+import '../models/historical_accident_location.dart';
+import '../models/osm_feature.dart';
 import '../models/route_candidate.dart';
 import '../models/route_model.dart';
 import '../models/user_preferences.dart';
@@ -6,10 +8,12 @@ import 'safety_engine.dart';
 
 /// Service analyzing and comparing multiple route alternatives.
 class RouteAnalysisService {
-  /// Evaluate and rank route alternatives against community hazards.
+  /// Evaluate and rank route alternatives against community hazards, historical data, and OSM infrastructure.
   static List<RouteCandidate> analyzeRouteCandidates({
     required List<RouteModel> routes,
     required List<HazardReport> nearbyReports,
+    List<HistoricalAccidentLocation>? historicalLocations,
+    List<OsmFeature>? osmFeatures,
     UserPreferences? preferences,
   }) {
     if (routes.isEmpty) return [];
@@ -30,6 +34,8 @@ class RouteAnalysisService {
       final safetyScore = SafetyEngine.calculateScore(
         route: route,
         nearbyReports: nearbyReports,
+        historicalLocations: historicalLocations,
+        osmFeatures: osmFeatures,
         minRouteDistanceMeters: minDistance,
         preferences: preferences,
       );

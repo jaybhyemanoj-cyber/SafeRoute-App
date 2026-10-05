@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/safety_config.dart';
 import '../theme/app_colors.dart';
 import 'safety_signal.dart';
 
@@ -10,6 +11,9 @@ class SafetyScore {
   final double proximityPenalty;
   final double densityPenalty;
   final double distancePenalty;
+  final double historicalPenalty;
+  final double osmInfrastructureBonus;
+  final double osmContextualBonus;
   final double confidence;
   final List<SafetySignal> signals;
   final List<String> whyBulletPoints;
@@ -21,14 +25,16 @@ class SafetyScore {
     required this.proximityPenalty,
     required this.densityPenalty,
     required this.distancePenalty,
+    this.historicalPenalty = 0.0,
+    this.osmInfrastructureBonus = 0.0,
+    this.osmContextualBonus = 0.0,
     required this.confidence,
     required this.signals,
     required this.whyBulletPoints,
   });
 
   /// Standard disclaimer requirement.
-  static const String disclaimer =
-      'Safety score based on community reports and route signals — not a guarantee of absolute safety.';
+  static const String disclaimer = SafetyConfig.trustSystemDisclaimer;
 
   /// Get color corresponding to safety score range.
   Color get badgeColor {

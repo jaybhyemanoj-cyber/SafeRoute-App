@@ -33,26 +33,9 @@ class SupabaseService {
       );
       _isInitialized = true;
       debugPrint('[SupabaseService] Initialized successfully.');
-
-      // Ensure anonymous session is active if supported
-      await _ensureAnonymousSession();
     } catch (e) {
       debugPrint('[SupabaseService] Initialization failed: $e');
       _isInitialized = false;
-    }
-  }
-
-  /// Ensure an anonymous session exists for low-friction user reporting.
-  Future<void> _ensureAnonymousSession() async {
-    if (!_isInitialized || client == null) return;
-    try {
-      final currentSession = client!.auth.currentSession;
-      if (currentSession == null) {
-        debugPrint('[SupabaseService] Signing in anonymously...');
-        await client!.auth.signInAnonymously();
-      }
-    } catch (e) {
-      debugPrint('[SupabaseService] Anonymous sign-in warning: $e');
     }
   }
 

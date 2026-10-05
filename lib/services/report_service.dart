@@ -95,4 +95,51 @@ class ReportService {
       debugPrint('[ReportService] Non-critical route history logging error: $e');
     }
   }
+
+  /// Confirm an active hazard report (distinct user vote).
+  /// Prevented from self-confirmation or duplicate votes by Supabase RLS and unique constraints.
+  static Future<bool> confirmReport(String reportId) async {
+    final client = SupabaseService.instance.client;
+    final userId = SupabaseService.instance.currentUserId;
+    if (client == null || userId == null) {
+      debugPrint('[ReportService] Auth required to confirm reports.');
+      return false;
+    }
+
+    try {
+      await client.from('report_votes').insert({
+        'report_id': reportId,
+        'user_id': userId,
+        'vote_type': 'confirm',
+      });
+      debugPrint('[ReportService] Confirmed report $reportId');
+      return true;
+    } catch (e) {
+      debugPrint('[ReportService] Report confirmation rejected (self-vote or duplicate): $e');
+      return false;
+    }
+  }
+
+  /// Mark an active hazard report as no longer present / clear (distinct user vote).
+  static Future<bool> clearReport(String reportId) async {
+    final client = SupabaseService.instance.client;
+    final userId = SupabaseService.instance.currentUserId;
+    if (client == null || userId == null) {
+      debugPrint('[ReportService] Auth required to clear reports.');
+      return false;
+    }
+
+    try {
+      await client.from('report_votes').insert({
+        'report_id': reportId,
+        'user_id': userId,
+        'vote_type': 'clear',
+      });
+      debugPrint('[ReportService] Cleared report $reportId');
+      return true;
+    } catch (e) {
+      debugPrint('[ReportService] Clear vote rejected (self-vote or duplicate): $e');
+      return false;
+    }
+  }
 }

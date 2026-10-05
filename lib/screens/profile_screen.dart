@@ -8,6 +8,10 @@ import '../theme/app_typography.dart';
 import 'preferences_screen.dart';
 import 'safety_insights_screen.dart';
 
+import '../models/emergency_contact.dart';
+import '../services/emergency_contact_service.dart';
+import '../widgets/emergency_contact_dialog.dart';
+
 /// User Profile Management Screen (Phase 6).
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -20,6 +24,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   final _authService = AuthService();
   bool _isLoading = true;
   UserProfile? _profile;
+  EmergencyContact? _emergencyContact;
 
   @override
   void initState() {
@@ -31,16 +36,79 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final user = _authService.currentUser;
     if (user != null) {
       final p = await ProfileService.getProfile(user.uid);
+      final c = await EmergencyContactService.getPrimaryContact(user.uid);
       if (mounted) {
         setState(() {
           _profile = p;
+          _emergencyContact = c;
           _isLoading = false;
         });
       }
     } else {
-      if (mounted) setState(() => _isLoading = false);
+      final c = await EmergencyContactService.getPrimaryContact();
+      if (mounted) {
+        setState(() {
+          _emergencyContact = c;
+          _isLoading = false;
+        });
+      }
     }
   }
+
+  Future<void> _editEmergencyContact() async {
+    final updated = await showDialog<EmergencyContact>(
+      context: context,
+      builder: (context) => EmergencyContactDialog(existingContact: _emergencyContact),
+    );
+
+    if (updated != null && mounted) {
+      setState(() => _emergencyContact = updated);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Primary Emergency Contact saved!'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteEmergencyContact() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Remove emergency contact?'),
+        content: const Text(
+          'Emergency SOS will not be able to send an alert until a new emergency contact is added.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.danger),
+            child: const Text('Remove', style: TextStyle(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true) {
+      final user = _authService.currentUser;
+      await EmergencyContactService.deletePrimaryContact(user?.uid);
+      if (mounted) {
+        setState(() => _emergencyContact = null);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Emergency contact removed.'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+    }
+  }
+
 
   Future<void> _editDisplayName() async {
     final controller = TextEditingController(text: _profile?.displayName ?? '');
@@ -157,6 +225,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     child: Column(
                       children: [
                         ListTile(
+                          leading: const Icon(Icons.contact_phone_rounded, color: AppColors.danger),
+                          title: const Text('Primary Emergency Contact', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                          subtitle: Text(
+                            _emergencyContact != null
+                                ? '${_emergencyContact!.name} (${_emergencyContact!.maskedPhoneNumber})'
+                                : 'Tap to configure parent/emergency contact for SOS',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: _emergencyContact != null ? AppColors.textPrimary : AppColors.danger,
+                            ),
+                          ),
+                          trailing: _emergencyContact != null
+                              ? Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit_outlined, size: 20, color: AppColors.primary),
+                                      onPressed: _editEmergencyContact,
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete_outline_rounded, size: 20, color: AppColors.danger),
+                                      onPressed: _deleteEmergencyContact,
+                                    ),
+                                  ],
+                                )
+                              : const Icon(Icons.chevron_right_rounded),
+                          onTap: _editEmergencyContact,
+                        ),
+                        const Divider(height: 1),
+                        ListTile(
                           leading: const Icon(Icons.tune_rounded, color: AppColors.primary),
                           title: const Text('Safety Preferences', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
                           subtitle: const Text('Customize hazard avoidance and alert sensitivity', style: TextStyle(fontSize: 12)),
@@ -167,6 +265,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                             );
                           },
                         ),
+
                         const Divider(height: 1),
                         ListTile(
                           leading: const Icon(Icons.insights_rounded, color: AppColors.primary),

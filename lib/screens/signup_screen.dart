@@ -5,6 +5,8 @@ import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../widgets/primary_button.dart';
 
+import 'verify_email_screen.dart';
+
 /// Signup Screen for creating new SafeRoute AI accounts (Phase 6).
 class SignupScreen extends StatefulWidget {
   const SignupScreen({super.key});
@@ -45,22 +47,17 @@ class _SignupScreenState extends State<SignupScreen> {
         displayName: _nameController.text,
       );
 
-      // Attempt immediate login
-      try {
-        await _authService.loginWithEmail(
-          email: _emailController.text,
-          password: _passwordController.text,
-        );
-      } catch (_) {}
-
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Account created successfully!'),
+            content: Text('Account created! Please verify your email address.'),
             backgroundColor: AppColors.primary,
           ),
         );
-        Navigator.of(context).pop();
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (context) => const VerifyEmailScreen()),
+          (route) => false,
+        );
       }
     } catch (e) {
       String errorMessage = e.toString().replaceAll('Exception:', '').trim();

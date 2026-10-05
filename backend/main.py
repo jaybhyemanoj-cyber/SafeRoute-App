@@ -7,6 +7,8 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
+import csv
+
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s [%(levelname)s] %(message)s')
 
@@ -24,6 +26,51 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+def load_historical_accidents() -> List[Dict[str, Any]]:
+    """Loads historical accident locations from CSV for internal backend reference only.
+    Missing coordinates/counts and unverified coordinates are excluded from scoring.
+    Raw records are kept private to backend and never exposed in responses or UI.
+    """
+    csv_path = os.path.join(os.path.dirname(__file__), 'saferoute_nagpur_historical_accident_locations.csv')
+    locations = []
+    if not os.path.exists(csv_path):
+        return locations
+    try:
+        with open(csv_path, mode='r', encoding='utf-8') as f:
+            reader = csv.DictReader(f)
+            for row in reader:
+                lat_str = row.get('latitude', '').strip()
+                lon_str = row.get('longitude', '').strip()
+                count_str = row.get('serious_accidents', '').strip()
+                status = row.get('verification_status', '').strip().lower()
+
+                lat = float(lat_str) if lat_str else None
+                lon = float(lon_str) if lon_str else None
+                count = int(count_str) if count_str else None
+
+                is_eligible = (
+                    lat is not None and
+                    lon is not None and
+                    count is not None and count > 0 and
+                    status == 'verified'
+                )
+
+                locations.append({
+                    "id": row.get('id', ''),
+                    "name": row.get('name', ''),
+                    "latitude": lat,
+                    "longitude": lon,
+                    "serious_accidents": count,
+                    "verification_status": row.get('verification_status', ''),
+                    "is_eligible": is_eligible
+                })
+    except Exception as e:
+        logging.warning(f"Failed to load historical accident locations CSV: {e}")
+    return locations
+
+HISTORICAL_LOCATIONS = load_historical_accidents()
+
 
 # Read Secrets strictly from Environment Variables (No hardcoded secrets)
 def get_gemini_keys() -> List[str]:

@@ -19,6 +19,7 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../utils/constants.dart';
+import '../widgets/cluster_marker.dart';
 import '../widgets/destination_marker.dart';
 import '../widgets/error_banner.dart';
 import '../widgets/hazard_filter.dart';
@@ -31,7 +32,16 @@ import '../widgets/report_form.dart';
 import '../widgets/route_comparison_card.dart';
 import '../widgets/route_info_sheet.dart';
 import '../widgets/safety_breakdown_sheet.dart';
+
 import '../widgets/search_bar_widget.dart';
+import '../services/emergency_service.dart';
+import '../widgets/sos_button.dart';
+import '../widgets/emergency_cancellation_dialog.dart';
+import '../widgets/emergency_status_sheet.dart';
+import '../models/emergency_contact.dart';
+import '../services/auth_service.dart';
+import '../services/emergency_contact_service.dart';
+import '../widgets/emergency_contact_dialog.dart';
 import 'navigation_screen.dart';
 import 'profile_screen.dart';
 
@@ -43,10 +53,13 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  static bool _hasPromptedEmergencySetupInSession = false;
+
   final MapController _mapController = MapController();
   final LocationService _locationService = LocationService();
   final RoutingService _routingService = RoutingService();
   final MapService _mapService = MapService();
+  final FocusNode _searchFocusNode = FocusNode();
 
   LatLng _currentCenter = AppConstants.defaultLocation;
   LocationModel? _currentLocation;
@@ -65,12 +78,91 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLocating = false;
   bool _isCalculatingRoute = false;
   bool _hasPermission = false;
+  bool _isCancellationDialogOpen = false;
 
   @override
   void initState() {
     super.initState();
     _checkInitialPermissionAndLocation();
     _fetchNearbyHazards();
+    EmergencyService.instance.addListener(_onEmergencyStateChanged);
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkFirstTimeEmergencyContactSetup();
+    });
+  }
+
+  Future<void> _checkFirstTimeEmergencyContactSetup() async {
+    if (_hasPromptedEmergencySetupInSession) return;
+
+    final user = AuthService().currentUser;
+    if (user == null || !user.emailVerified) return;
+
+    final contact = await EmergencyContactService.getPrimaryContact(user.uid);
+    if (contact == null && mounted && !_hasPromptedEmergencySetupInSession) {
+      _hasPromptedEmergencySetupInSession = true;
+      final result = await showDialog<EmergencyContact?>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const EmergencyContactDialog(isFirstTimeSetup: true),
+      );
+
+      if (result != null && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Emergency contact saved successfully!'),
+            backgroundColor: AppColors.primary,
+          ),
+        );
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    EmergencyService.instance.removeListener(_onEmergencyStateChanged);
+    _searchFocusNode.dispose();
+    super.dispose();
+  }
+
+  void _onEmergencyStateChanged() {
+    final service = EmergencyService.instance;
+    if (!mounted) return;
+
+    setState(() {});
+
+    if (service.isPreparing && !_isCancellationDialogOpen) {
+      _isCancellationDialogOpen = true;
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => const EmergencyCancellationDialog(),
+      ).then((_) {
+        _isCancellationDialogOpen = false;
+      });
+    } else if (!service.isPreparing && _isCancellationDialogOpen) {
+      try {
+        Navigator.of(context, rootNavigator: true).pop();
+      } catch (_) {}
+      _isCancellationDialogOpen = false;
+    }
+  }
+
+
+  void _safeMove(LatLng center, double zoom) {
+    try {
+      _mapController.move(center, zoom);
+    } catch (e) {
+      debugPrint('[HomeScreen] MapController not ready for move: $e');
+    }
+  }
+
+  void _safeFitBounds(LatLngBounds bounds) {
+    try {
+      _mapService.fitBounds(_mapController, bounds);
+    } catch (e) {
+      debugPrint('[HomeScreen] MapController not ready for fitBounds: $e');
+    }
   }
 
   Future<void> _checkInitialPermissionAndLocation() async {
@@ -98,7 +190,7 @@ class _HomeScreenState extends State<HomeScreen> {
       if (reports.isNotEmpty && _selectedDestination == null) {
         final points = reports.map((r) => LatLng(r.latitude, r.longitude)).toList();
         final bounds = _mapService.calculateBounds(points);
-        _mapService.fitBounds(_mapController, bounds);
+        _safeFitBounds(bounds);
       }
     }
   }
@@ -153,7 +245,7 @@ class _HomeScreenState extends State<HomeScreen> {
         _currentLocation = loc;
         _currentCenter = loc.toLatLng();
       });
-      _mapController.move(_currentCenter, AppConstants.detailZoom);
+      _safeMove(_currentCenter, AppConstants.detailZoom);
       _fetchNearbyHazards();
     } else if (showError && mounted) {
       ErrorBanner.show(
@@ -174,14 +266,31 @@ class _HomeScreenState extends State<HomeScreen> {
       _activeCandidate = null;
     });
 
-    _mapController.move(dest.toLatLng(), AppConstants.detailZoom);
+    _safeMove(dest.toLatLng(), AppConstants.detailZoom);
   }
 
   Future<void> _calculateRoute() async {
     if (_selectedDestination == null) return;
 
-    final LatLng origin =
-        _currentLocation?.toLatLng() ?? AppConstants.defaultLocation;
+    if (_currentLocation == null) {
+      final loc = await _locationService.getCurrentLocation();
+      if (loc != null) {
+        setState(() => _currentLocation = loc);
+      } else {
+        if (mounted) {
+          ErrorBanner.show(
+            context: context,
+            title: 'Location required',
+            message: 'Unable to get valid GPS position for routing. Please check location settings.',
+            icon: Icons.gps_off_rounded,
+            onRetry: _calculateRoute,
+          );
+        }
+        return;
+      }
+    }
+
+    final LatLng origin = _currentLocation!.toLatLng();
     final LatLng destination = _selectedDestination!.toLatLng();
 
     setState(() => _isCalculatingRoute = true);
@@ -217,7 +326,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
       // Fit map camera to enclose origin and destination points
       final bounds = _mapService.calculateBounds(primaryCandidate.route.polylinePoints);
-      _mapService.fitBounds(_mapController, bounds);
+      _safeFitBounds(bounds);
     } else if (mounted) {
       ErrorBanner.show(
         context: context,
@@ -236,7 +345,7 @@ class _HomeScreenState extends State<HomeScreen> {
     });
 
     final bounds = _mapService.calculateBounds(candidate.route.polylinePoints);
-    _mapService.fitBounds(_mapController, bounds);
+    _safeFitBounds(bounds);
   }
 
   void _showSafetyBreakdown(RouteCandidate candidate) {
@@ -330,8 +439,20 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final mediaQuery = MediaQuery.of(context);
-    final LatLng userPos =
-        _currentLocation?.toLatLng() ?? AppConstants.defaultLocation;
+
+    // Safely acquire map camera (which is null before FlutterMap renders its first frame)
+    MapCamera? camera;
+    try {
+      camera = _mapController.camera;
+    } catch (_) {
+      camera = null;
+    }
+
+    // Build hazard clusters based on filtered reports and map camera zoom/projection
+    final clusters = ClusterHelper.buildClusters(
+      reports: _filteredReports,
+      camera: camera,
+    );
 
     return Scaffold(
       body: Stack(
@@ -339,14 +460,20 @@ class _HomeScreenState extends State<HomeScreen> {
           // 1. Immersive OpenStreetMap Layer
           FlutterMap(
             mapController: _mapController,
-            options: const MapOptions(
+            options: MapOptions(
               initialCenter: AppConstants.defaultLocation,
               initialZoom: AppConstants.defaultZoom,
               minZoom: 4.0,
               maxZoom: 18.0,
-              interactionOptions: InteractionOptions(
+              interactionOptions: const InteractionOptions(
                 flags: InteractiveFlag.all,
               ),
+              onMapReady: () {
+                if (mounted) setState(() {});
+              },
+              onPositionChanged: (position, hasGesture) {
+                setState(() {});
+              },
             ),
             children: [
               TileLayer(
@@ -382,18 +509,39 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
 
-              // Markers Layer (User Location + Destination + Phase 2 Hazard Markers)
+              // Markers Layer (Clusters & Individual Hazard Markers + Destination + User Location)
               MarkerLayer(
                 markers: [
-                  // User Current Location Marker
-                  Marker(
-                    point: userPos,
-                    width: 32,
-                    height: 32,
-                    child: const CurrentLocationMarkerWidget(),
-                  ),
+                  // 1. Hazard Clusters & Hazard Markers
+                  ...clusters.map((cluster) {
+                    if (cluster.count > 1) {
+                      return Marker(
+                        point: cluster.center,
+                        width: 36,
+                        height: 36,
+                        alignment: Alignment.center,
+                        child: ClusterMarkerWidget(
+                          count: cluster.count,
+                          onTap: () {
+                            double currentZoom = 13.0;
+                            try {
+                              currentZoom = _mapController.camera.zoom;
+                            } catch (_) {}
+                            final targetZoom = (currentZoom + 2.5).clamp(4.0, 18.0);
+                            _mapController.move(cluster.center, targetZoom);
+                          },
+                        ),
+                      );
+                    } else {
+                      final report = cluster.reports.first;
+                      return HazardMarkerWidget.buildMarker(
+                        report: report,
+                        onTap: () => _showHazardDetails(report),
+                      );
+                    }
+                  }),
 
-                  // Destination Marker
+                  // 2. Destination Marker
                   if (_selectedDestination != null)
                     Marker(
                       point: _selectedDestination!.toLatLng(),
@@ -405,13 +553,15 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
 
-                  // Phase 2: Community Hazard Markers
-                  ..._filteredReports.map(
-                    (report) => HazardMarkerWidget.buildMarker(
-                      report: report,
-                      onTap: () => _showHazardDetails(report),
+                  // 3. User Live Location Marker (Drawn LAST to sit on top of hazards and clusters)
+                  if (_currentLocation != null)
+                    Marker(
+                      point: _currentLocation!.toLatLng(),
+                      width: 32,
+                      height: 32,
+                      alignment: Alignment.center,
+                      child: const CurrentLocationMarkerWidget(),
                     ),
-                  ),
                 ],
               ),
             ],
@@ -470,6 +620,8 @@ class _HomeScreenState extends State<HomeScreen> {
                       Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
+                          const SosButton(),
+                          const SizedBox(width: AppSpacing.xs + 2),
                           if (_isLoadingReports)
                             Container(
                               margin: const EdgeInsets.only(right: AppSpacing.xs),
@@ -516,6 +668,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ],
                       ),
+
                     ],
                   ),
                 ),
@@ -526,6 +679,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: AppSpacing.lg),
                   child: FloatingSearchBar(
+                    focusNode: _searchFocusNode,
                     onDestinationSelected: _onDestinationSelected,
                     onClear: _clearRouteAndSelection,
                   ),
@@ -551,9 +705,7 @@ class _HomeScreenState extends State<HomeScreen> {
             right: AppSpacing.lg,
             bottom: _activeRoute != null
                 ? (_routeCandidates.length > 1 ? 330 : 250)
-                : _selectedDestination != null
-                    ? 180
-                    : 40,
+                : 100,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
@@ -584,17 +736,23 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // 4. "Find Walking Route" Floating CTA Button
-          if (_selectedDestination != null && _activeRoute == null)
+          // 4. "Find Route" Floating CTA Button
+          if (_activeRoute == null)
             Positioned(
               left: AppSpacing.lg,
               right: AppSpacing.lg,
               bottom: AppSpacing.xxl,
               child: PrimaryButton(
-                text: 'Find Walking Route',
-                icon: Icons.directions_walk_rounded,
+                text: 'Find Route',
+                icon: Icons.alt_route_rounded,
                 isLoading: _isCalculatingRoute,
-                onPressed: _calculateRoute,
+                onPressed: () {
+                  if (_selectedDestination == null) {
+                    _searchFocusNode.requestFocus();
+                  } else {
+                    _calculateRoute();
+                  }
+                },
               ),
             ),
 
@@ -630,8 +788,19 @@ class _HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
+
+          // 6. Emergency Status Sheet Overlay
+          if (EmergencyService.instance.isEmergencyActive &&
+              !EmergencyService.instance.isPreparing)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: EmergencyStatusSheet(),
+            ),
         ],
       ),
     );
   }
 }
+

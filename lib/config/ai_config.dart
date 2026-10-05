@@ -1,4 +1,5 @@
-import 'package:flutter/foundation.dart';
+
+import 'safety_config.dart';
 
 /// Centralized configuration for SafeRoute AI Explanation Layer (Phase 5).
 class AiConfig {
@@ -18,6 +19,5 @@ class AiConfig {
   static const Duration timeout = Duration(seconds: 5);
 
   /// Standard user-facing AI safety disclaimer text.
-  static const String disclaimerText =
-      'AI insights are derived strictly from available community reports and geometry facts. Reports may be incomplete.';
+  static const String disclaimerText = SafetyConfig.trustSystemDisclaimer;
 }

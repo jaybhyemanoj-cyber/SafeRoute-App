@@ -1,18 +1,25 @@
 import 'package:latlong2/latlong.dart';
 import '../config/safety_config.dart';
 import '../models/hazard_report.dart';
+import '../models/historical_accident_location.dart';
+import '../models/osm_feature.dart';
 import '../models/route_model.dart';
 import '../models/safety_score.dart';
 import '../models/safety_signal.dart';
 import '../models/user_preferences.dart';
 import 'hazard_analysis_service.dart';
+import 'historical_accident_service.dart';
+import 'osm_infrastructure_service.dart';
 
 /// Centralized Safety Analysis Engine for calculating transparent route safety scores (Phase 3 & Phase 6).
 class SafetyEngine {
-  /// Calculate SafetyScore for a candidate route against nearby community hazard reports and optional user preferences.
+  /// Calculate SafetyScore for a candidate route against nearby community hazard reports,
+  /// verified historical accident data, OpenStreetMap infrastructure/context, and optional user preferences.
   static SafetyScore calculateScore({
     required RouteModel route,
     required List<HazardReport> nearbyReports,
+    List<HistoricalAccidentLocation>? historicalLocations,
+    List<OsmFeature>? osmFeatures,
     double minRouteDistanceMeters = 0,
     UserPreferences? preferences,
   }) {
@@ -38,6 +45,9 @@ class SafetyEngine {
       int activeCount = 0;
 
       for (final report in reports) {
+        // Skip expired reports (expired reports must NOT affect current route scoring)
+        if (report.isExpired) continue;
+
         final distToRoute = HazardAnalysisService.getMinimumDistanceToRoute(
           LatLng(report.latitude, report.longitude),
           route.polylinePoints,
@@ -51,6 +61,8 @@ class SafetyEngine {
             confidence: report.confidence,
             createdAt: report.createdAt,
             distanceMeters: distToRoute,
+            report: report,
+            clusterSize: reports.length,
           );
 
           categorySumPenalty += effectivePenalty;
@@ -123,6 +135,37 @@ class SafetyEngine {
       whyBullets.add('${(excessRatio * 100).round()}% longer walking distance');
     }
 
+    // Calculate historical accident risk penalty internally if historical locations provided
+    double historicalPenalty = 0.0;
+    if (historicalLocations != null && historicalLocations.isNotEmpty) {
+      historicalPenalty = HistoricalAccidentService.calculateHistoricalPenalty(
+        route: route,
+        locations: historicalLocations,
+      );
+      if (historicalPenalty > 0) {
+        whyBullets.add('Historical road-safety data considered');
+      }
+    }
+
+    // Evaluate OpenStreetMap infrastructure & contextual features internally if provided
+    double osmInfrastructureBonus = 0.0;
+    double osmContextualBonus = 0.0;
+    if (osmFeatures != null && osmFeatures.isNotEmpty) {
+      final adjustments = OsmInfrastructureService.calculateOsmScoreAdjustments(
+        route: route,
+        features: osmFeatures,
+      );
+      osmInfrastructureBonus = adjustments.totalInfrastructureBonus;
+      osmContextualBonus = adjustments.totalContextualBonus;
+
+      if (osmInfrastructureBonus > 0) {
+        whyBullets.add('Pedestrian infrastructure present');
+      }
+      if (osmContextualBonus > 0) {
+        whyBullets.add('Contextual safety facilities nearby');
+      }
+    }
+
     // Default positive bullet points if few hazards detected
     if (detectedSignals.isEmpty) {
       whyBullets.add('No active community hazard reports along route');
@@ -131,8 +174,9 @@ class SafetyEngine {
       whyBullets.add('Low hazard density along path');
     }
 
-    final double totalPenalties = totalHazardPenalty + distancePenalty;
-    final int finalScore = (100 - totalPenalties.round()).clamp(0, 100);
+    final double totalBonus = (osmInfrastructureBonus + osmContextualBonus).clamp(0.0, 10.0);
+    final double totalPenalties = totalHazardPenalty + distancePenalty + historicalPenalty;
+    final int finalScore = (100 - totalPenalties.round() + totalBonus.round()).clamp(0, 100);
 
     return SafetyScore(
       overallScore: finalScore,
@@ -141,6 +185,9 @@ class SafetyEngine {
       proximityPenalty: totalProximitySubPenalty,
       densityPenalty: totalDensitySubPenalty,
       distancePenalty: distancePenalty,
+      historicalPenalty: historicalPenalty,
+      osmInfrastructureBonus: osmInfrastructureBonus,
+      osmContextualBonus: osmContextualBonus,
       confidence: 0.90,
       signals: detectedSignals,
       whyBulletPoints: whyBullets,

@@ -20,11 +20,10 @@ class HazardMarkerWidget extends StatelessWidget {
     required HazardReport report,
     required VoidCallback onTap,
   }) {
-    final isDemo = report.isDemo;
     return Marker(
       point: LatLng(report.latitude, report.longitude),
-      width: isDemo ? 54 : 44,
-      height: isDemo ? 54 : 44,
+      width: 30,
+      height: 30,
       alignment: Alignment.center,
       child: HazardMarkerWidget(
         report: report,
@@ -56,55 +55,29 @@ class HazardMarkerWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final accentColor = _getHazardColor(report.hazardType);
-    final isDemo = report.isDemo;
 
     return GestureDetector(
       onTap: onTap,
       behavior: HitTestBehavior.opaque,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.surface,
-              shape: BoxShape.circle,
-              border: Border.all(
-                color: isDemo ? Colors.purple.shade600 : accentColor,
-                width: isDemo ? 3.0 : 2.5,
-              ),
-              boxShadow: AppColors.softShadow,
-            ),
-            child: Center(
-              child: Icon(
-                report.iconData,
-                size: 20,
-                color: isDemo ? Colors.purple.shade700 : accentColor,
-              ),
-            ),
+      child: Container(
+        width: 30,
+        height: 30,
+        decoration: BoxDecoration(
+          color: AppColors.surface,
+          shape: BoxShape.circle,
+          border: Border.all(
+            color: accentColor,
+            width: 2.0,
           ),
-          if (isDemo)
-            Positioned(
-              top: 0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                decoration: BoxDecoration(
-                  color: Colors.purple.shade700,
-                  borderRadius: BorderRadius.circular(4),
-                ),
-                child: const Text(
-                  'DEMO',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 8,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-              ),
-            ),
-        ],
+          boxShadow: AppColors.softShadow,
+        ),
+        child: Center(
+          child: Icon(
+            report.iconData,
+            size: 16,
+            color: accentColor,
+          ),
+        ),
       ),
     );
   }

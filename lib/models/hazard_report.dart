@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../config/safety_config.dart';
 
 /// Represents a community-reported safety hazard.
 class HazardReport {
@@ -12,6 +13,8 @@ class HazardReport {
   final DateTime createdAt;
   final String status;
   final double confidence;
+  final int confirmationsCount;
+  final int clearVotesCount;
 
   const HazardReport({
     required this.id,
@@ -24,7 +27,20 @@ class HazardReport {
     required this.createdAt,
     this.status = 'active',
     this.confidence = 0.5,
+    this.confirmationsCount = 0,
+    this.clearVotesCount = 0,
   });
+
+  /// Check if this report is automatically expired based on its hazard type duration or status.
+  bool get isExpired => SafetyConfig.isReportExpired(hazardType, createdAt) || status == 'expired';
+
+  /// Check if this report has received sufficient distinct-user confirmations.
+  bool get isCommunityConfirmed =>
+      confirmationsCount >= SafetyConfig.requiredConfirmationsForConfirmedLabel &&
+      clearVotesCount < confirmationsCount;
+
+  /// User-facing trust system label: "Community-confirmed" or "Unconfirmed".
+  String get verificationLabel => isCommunityConfirmed ? 'Community-confirmed' : 'Unconfirmed';
 
   /// Check if this report is a synthetic demo data record for testing.
   bool get isDemo =>
@@ -59,6 +75,8 @@ class HazardReport {
       confidence: json['confidence'] != null
           ? (json['confidence'] as num).toDouble()
           : 0.5,
+      confirmationsCount: (json['confirmations_count'] as num?)?.toInt() ?? 0,
+      clearVotesCount: (json['clear_votes_count'] as num?)?.toInt() ?? 0,
     );
   }
 
@@ -75,6 +93,8 @@ class HazardReport {
       'created_at': createdAt.toIso8601String(),
       'status': status,
       'confidence': confidence,
+      'confirmations_count': confirmationsCount,
+      'clear_votes_count': clearVotesCount,
     };
   }
 

@@ -4,9 +4,11 @@ import '../theme/app_colors.dart';
 import '../theme/app_spacing.dart';
 import '../theme/app_typography.dart';
 import '../widgets/primary_button.dart';
+import 'auth_wrapper_screen.dart';
 import 'forgot_password_screen.dart';
 import 'home_screen.dart';
 import 'signup_screen.dart';
+import 'verify_email_screen.dart';
 
 /// Production-quality Login Screen with Email & Google OAuth (Phase 6).
 class LoginScreen extends StatefulWidget {
@@ -42,6 +44,29 @@ class _LoginScreenState extends State<LoginScreen> {
         email: _emailController.text,
         password: _passwordController.text,
       );
+
+      final user = _authService.currentUser;
+      if (user != null && !user.emailVerified) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Please verify your email address before continuing.'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const VerifyEmailScreen()),
+            (route) => false,
+          );
+        }
+      } else if (user != null && user.emailVerified) {
+        if (mounted) {
+          Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (context) => const AuthWrapperScreen()),
+            (route) => false,
+          );
+        }
+      }
     } catch (e) {
       String errorMessage = e.toString().replaceAll('Exception:', '').trim();
       if (errorMessage.contains('user-not-found') || 
@@ -205,28 +230,6 @@ class _LoginScreenState extends State<LoginScreen> {
                         ),
                       ),
                     ],
-                  ),
-
-                  const SizedBox(height: AppSpacing.xs),
-
-                  // Guest Mode Bypass Button
-                  Center(
-                    child: TextButton.icon(
-                      onPressed: () {
-                        Navigator.of(context).pushReplacement(
-                          MaterialPageRoute(builder: (context) => const HomeScreen()),
-                        );
-                      },
-                      icon: const Icon(Icons.explore_outlined, size: 18, color: AppColors.primaryDark),
-                      label: const Text(
-                        'Continue as Guest',
-                        style: TextStyle(
-                          color: AppColors.primaryDark,
-                          fontWeight: FontWeight.w600,
-                          fontSize: 14,
-                        ),
-                      ),
-                    ),
                   ),
                 ],
               ),

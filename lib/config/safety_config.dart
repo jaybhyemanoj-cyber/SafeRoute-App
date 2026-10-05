@@ -44,6 +44,53 @@ class SafetyConfig {
   /// Distance difference threshold (10% excess allowed before applying penalty).
   static const double distanceToleranceRatio = 0.10;
 
+  /// Configurable radius in meters to evaluate verified historical accident locations.
+  static const double historicalSearchRadiusMeters = 100.0;
+
+  /// Configurable maximum penalty points (0-15 scale) applied for historical risk.
+  static const double maxHistoricalPenalty = 15.0;
+
+  /// Configurable radius in meters to evaluate OpenStreetMap infrastructure & contextual features.
+  static const double osmFeatureSearchRadiusMeters = 100.0;
+
+  /// Maximum positive bonus points granted for mapped pedestrian infrastructure.
+  static const double maxOsmPedestrianBonus = 5.0;
+
+  /// Maximum positive bonus points granted for contextual safety facilities (police/medical/shops).
+  static const double maxOsmContextualBonus = 5.0;
+
+  // --- Phase 4 Automated Trust System Configuration Parameters ---
+
+  /// Configurable automatic report expiry durations by hazard category.
+  static const Map<String, Duration> hazardExpiryDurations = {
+    'stray_animals': Duration(hours: 24),        // 1 day
+    'heavy_traffic': Duration(hours: 48),        // 2 days
+    'waterlogging': Duration(hours: 48),         // 2 days
+    'suspicious_activity': Duration(hours: 72),  // 3 days
+    'poor_lighting': Duration(days: 7),          // 7 days
+    'unsafe_crossing': Duration(days: 7),        // 7 days
+    'broken_footpath': Duration(days: 14),       // 14 days
+    'road_damage': Duration(days: 14),           // 14 days
+    'construction': Duration(days: 14),          // 14 days
+    'other': Duration(days: 7),                  // 7 days
+  };
+
+  /// Check if a report has expired based on its hazard type and creation timestamp.
+  static bool isReportExpired(String hazardType, DateTime createdAt) {
+    final maxDuration = hazardExpiryDurations[hazardType] ?? const Duration(days: 7);
+    return DateTime.now().difference(createdAt) > maxDuration;
+  }
+
+  /// Number of distinct user confirmations required for the 'Community-confirmed' label.
+  static const int requiredConfirmationsForConfirmedLabel = 2;
+
+  /// Mandatory safety information disclaimer required across Phase 4.
+  static const String trustSystemDisclaimer =
+      'Safety information is based on available map data and community reports. Route safety is not guaranteed. Conditions may change; stay alert and use your own judgment.';
+
+
+
+
   // --- Phase 4 Live Navigation Configuration Parameters ---
 
   /// Distance threshold in meters to trigger an upcoming hazard proximity warning banner (e.g. 150m).

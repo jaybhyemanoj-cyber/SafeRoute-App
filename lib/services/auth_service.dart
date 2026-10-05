@@ -23,6 +23,27 @@ class AuthService {
   /// Check if user is logged in.
   bool get isAuthenticated => currentUser != null;
 
+  /// Check if user email is verified.
+  bool get isEmailVerified => currentUser?.emailVerified ?? false;
+
+  /// Send email verification to current user.
+  Future<void> sendEmailVerification() async {
+    final user = currentUser;
+    if (user != null && !user.emailVerified) {
+      await user.sendEmailVerification();
+    }
+  }
+
+  /// Reload current user from Firebase Auth to get authoritative state.
+  Future<fb.User?> reloadUser() async {
+    final user = currentUser;
+    if (user != null) {
+      await user.reload();
+      return _fbAuth.currentUser;
+    }
+    return null;
+  }
+
   /// Sign Up with Email & Password using Firebase Auth.
   Future<fb.UserCredential> signUpWithEmail({
     required String email,
@@ -36,6 +57,7 @@ class AuthService {
 
     if (credential.user != null) {
       await credential.user!.updateDisplayName(displayName.trim());
+      await credential.user!.sendEmailVerification();
       await _ensureUserProfileAndPreferences(
         userId: credential.user!.uid,
         displayName: displayName.trim(),
@@ -56,6 +78,7 @@ class AuthService {
     );
 
     if (credential.user != null) {
+      await credential.user!.reload();
       final name = credential.user!.displayName ?? email.split('@').first;
       await _ensureUserProfileAndPreferences(
         userId: credential.user!.uid,

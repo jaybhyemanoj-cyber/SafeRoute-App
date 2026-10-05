@@ -3,19 +3,48 @@ import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 import 'home_screen.dart';
 import 'login_screen.dart';
+import 'verify_email_screen.dart';
 
-/// Application entry point routing based on Firebase Authentication state.
-class AuthWrapperScreen extends StatelessWidget {
+/// Application entry point routing based on Firebase Authentication state and email verification.
+class AuthWrapperScreen extends StatefulWidget {
   const AuthWrapperScreen({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final authService = AuthService();
+  State<AuthWrapperScreen> createState() => _AuthWrapperScreenState();
+}
 
+class _AuthWrapperScreenState extends State<AuthWrapperScreen> {
+  final _authService = AuthService();
+  bool _isCheckingVerification = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkInitialUserVerification();
+  }
+
+  Future<void> _checkInitialUserVerification() async {
+    final user = _authService.currentUser;
+    if (user != null && !user.emailVerified) {
+      try {
+        await user.reload();
+      } catch (e) {
+        debugPrint('[AuthWrapper] Initial user reload warning: $e');
+      }
+    }
+    if (mounted) {
+      setState(() {
+        _isCheckingVerification = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return StreamBuilder<fb.User?>(
-      stream: authService.authStateChanges,
+      stream: _authService.authStateChanges,
       builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
+        if (snapshot.connectionState == ConnectionState.waiting || _isCheckingVerification) {
           return const Scaffold(
             body: Center(
               child: CircularProgressIndicator(),
@@ -23,13 +52,19 @@ class AuthWrapperScreen extends StatelessWidget {
           );
         }
 
-        final user = snapshot.data ?? authService.currentUser;
+        final user = snapshot.data ?? _authService.currentUser;
 
-        if (user != null) {
+        if (user == null) {
+          return const LoginScreen();
+        }
+
+        // Authoritative Firebase verification check
+        if (user.emailVerified) {
           return const HomeScreen();
         }
 
-        return const LoginScreen();
+        // Unverified email/password user -> Block main app & show verification screen
+        return const VerifyEmailScreen();
       },
     );
   }
